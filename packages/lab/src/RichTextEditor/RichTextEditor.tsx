@@ -24,7 +24,7 @@
  * dependencies — install them to use this component.
  */
 
-import {useEffect, useId, useRef, type ReactNode} from 'react';
+import {useEffect, useId, useMemo, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -59,7 +59,8 @@ import {LinkPlugin} from '@lexical/react/LexicalLinkPlugin';
 import {TabIndentationPlugin} from '@lexical/react/LexicalTabIndentationPlugin';
 import {MarkdownShortcutPlugin} from '@lexical/react/LexicalMarkdownShortcutPlugin';
 import {OnChangePlugin} from '@lexical/react/LexicalOnChangePlugin';
-import {TRANSFORMERS} from '@lexical/markdown';
+import {TRANSFORMERS, type Transformer} from '@lexical/markdown';
+export type {Transformer} from '@lexical/markdown';
 import {ListNode, ListItemNode} from '@lexical/list';
 import {HeadingNode, QuoteNode} from '@lexical/rich-text';
 import {LinkNode, AutoLinkNode} from '@lexical/link';
@@ -224,10 +225,29 @@ export interface RichTextEditorProps extends Omit<
   plugins?: ReactNode;
   /**
    * Whether to enable Markdown shortcut typing (e.g. `# ` for a heading,
-   * `- ` for a list). Uses the default `@lexical/markdown` transformers.
+   * `- ` for a list). Uses the `transformers` prop (defaults to the standard
+   * `@lexical/markdown` transformers).
    * @default true
    */
   hasMarkdownShortcuts?: boolean;
+  /**
+   * Markdown transformers — the single source of truth for markdown behaviour.
+   * Defaults to the standard `@lexical/markdown` `TRANSFORMERS`.
+   *
+   * The same array drives all three markdown operations in Lexical (see the
+   * lexical-playground reference, where one `PLAYGROUND_TRANSFORMERS` array
+   * feeds each):
+   *  - shortcut typing        — `registerMarkdownShortcuts` (wired here today)
+   *  - markdown -> state       — `$convertFromMarkdownString` (future import API)
+   *  - state -> markdown       — `$convertToMarkdownString` (future `getMarkdown`)
+   *
+   * Pass a custom array to support additional node types (e.g. custom
+   * transformers layered in via the `nodes` extension point) consistently
+   * across all three. Shortcut typing is only applied when
+   * `hasMarkdownShortcuts` is true; the array is still the intended input for
+   * the serialization APIs added in later phases.
+   */
+  transformers?: ReadonlyArray<Transformer>;
   /** Whether to automatically focus the editor on mount. @default false */
   hasAutoFocus?: boolean;
   /**
@@ -275,6 +295,7 @@ export function RichTextEditor({
   nodes,
   plugins,
   hasMarkdownShortcuts = true,
+  transformers = TRANSFORMERS,
   hasAutoFocus = false,
   namespace = 'astryx-editor',
   xstyle,
@@ -295,6 +316,12 @@ export function RichTextEditor({
   }
 
   const editable = !isReadOnly && !isDisabled;
+
+  // Stabilize the transformers array so MarkdownShortcutPlugin doesn't
+  // re-register on every render. `[...transformers]` would allocate a new
+  // array each time; memoize on the prop identity instead. (React Compiler
+  // isn't running the transform in this repo, so this isn't auto-memoized.)
+  const markdownTransformers = useMemo(() => [...transformers], [transformers]);
 
   const initialConfig: InitialConfigType = {
     namespace,
@@ -379,7 +406,7 @@ export function RichTextEditor({
             <LinkPlugin />
             <TabIndentationPlugin />
             {hasMarkdownShortcuts && (
-              <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
+              <MarkdownShortcutPlugin transformers={markdownTransformers} />
             )}
             {hasAutoFocus && <AutoFocusOnMount />}
             {onChange && (

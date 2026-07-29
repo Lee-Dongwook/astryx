@@ -76,11 +76,14 @@ console.log('Discovering...');
 const api = await import('../../packages/cli/api/index.mjs');
 
 const componentList = cliJson(['component', '--list']);
-// `component --list` data is package-qualified: each group value is an array
-// of { name, package } objects. Map to bare names for the per-component cases.
-// (Tolerate plain strings too, in case the shape is ever simplified.)
-const allComponents = componentList.data && !componentList.error
-  ? Object.values(componentList.data)
+// `component --list` nests the grouped map under data.components (the depth tag
+// lives in data.detail). Each group value is an array of { name, package }
+// objects. Map to bare names for the per-component cases. (Tolerate plain
+// strings too, in case the shape is ever simplified.)
+const componentGroups =
+  componentList.data && !componentList.error ? componentList.data.components : null;
+const allComponents = componentGroups
+  ? Object.values(componentGroups)
       .flat()
       .map(c => (typeof c === 'string' ? c : c.name))
   : [];
@@ -90,15 +93,13 @@ const allTopics = docsList.data && !docsList.error
   ? docsList.data.map(e => e.topic)
   : [];
 
-const categories = componentList.data ? Object.keys(componentList.data) : [];
+const categories = componentGroups ? Object.keys(componentGroups) : [];
 
 const hookList = cliJson(['hook', '--list']);
-const allHooks = hookList.data && !hookList.error
-  ? Object.values(hookList.data).flat()
-  : [];
-const hookCategories = hookList.data && !hookList.error
-  ? Object.keys(hookList.data)
-  : [];
+const hookGroups =
+  hookList.data && !hookList.error ? hookList.data.components : null;
+const allHooks = hookGroups ? Object.values(hookGroups).flat() : [];
+const hookCategories = hookGroups ? Object.keys(hookGroups) : [];
 
 console.log(`  ${allComponents.length} components, ${allTopics.length} doc topics, ${categories.length} categories`);
 console.log(`  ${allHooks.length} hooks, ${hookCategories.length} hook categories`);
@@ -199,11 +200,14 @@ if (firstTemplate) {
 add('template nonexistent', ['template', 'nonexistent99'],
   () => apiCall(api.template, 'nonexistent99'));
 
-// Theme add — list + error paths (read-only; never scaffolds files here).
+// Theme list + add error path (read-only; never scaffolds files here).
+// `theme list` / `theme add --list` are served by the dedicated themeList()
+// leaf (the CLI routes the --list affordance there); themeAdd() now only
+// scaffolds a named slug and throws on a missing/unknown one.
 add('theme list', ['theme', 'list'],
-  () => apiCall(api.themeAdd, undefined, {list: true, cwd: ROOT}));
+  () => apiCall(api.themeList));
 add('theme add --list', ['theme', 'add', '--list'],
-  () => apiCall(api.themeAdd, undefined, {list: true, cwd: ROOT}));
+  () => apiCall(api.themeList));
 add('theme add nonexistent', ['theme', 'add', 'nonexistent99'],
   () => apiCall(api.themeAdd, 'nonexistent99', {cwd: ROOT}));
 

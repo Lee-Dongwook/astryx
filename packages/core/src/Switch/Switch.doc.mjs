@@ -63,6 +63,12 @@ export const docs = {
       default: 'false',
     },
     {
+      name: 'size',
+      type: "'sm' | 'md'",
+      description: 'Size variant controlling track and thumb dimensions. sm (34x20px) matches sm checkbox/radio vertical rhythm; md (40x24px, default) matches md checkbox/radio vertical rhythm.',
+      default: "'md'",
+    },
+    {
       name: 'htmlName',
       type: 'string',
       description:
@@ -132,8 +138,8 @@ export const docs = {
   ],
   theming: {
     targets: [
-      {className: 'astryx-switch', states: ['checked', 'disabled']},
-      {className: 'astryx-switch-thumb', states: ['checked']},
+      {className: 'astryx-switch', visualProps: ['size'], states: ['checked', 'disabled']},
+      {className: 'astryx-switch-thumb', visualProps: ['size'], states: ['checked']},
       {className: 'astryx-switch-field', visualProps: ['labelPosition', 'labelSpacing']},
     ],
   },
@@ -278,8 +284,8 @@ export const docsZh = {
   ],
   theming: {
     targets: [
-      {className: 'astryx-switch', states: ['checked', 'disabled']},
-      {className: 'astryx-switch-thumb', states: ['checked']},
+      {className: 'astryx-switch', visualProps: ['size'], states: ['checked', 'disabled']},
+      {className: 'astryx-switch-thumb', visualProps: ['size'], states: ['checked']},
       {className: 'astryx-switch-field', visualProps: ['labelPosition', 'labelSpacing']},
     ],
   },
