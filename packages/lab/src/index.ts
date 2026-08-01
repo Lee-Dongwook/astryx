@@ -35,6 +35,9 @@ export * from './Chat';
 // Drawer — experimental overlay panel
 export {Drawer, type DrawerProps} from './Drawer';
 
+// BottomSheet — mobile touch sheet on a native modal <dialog>
+export {BottomSheet, type BottomSheetProps} from './BottomSheet';
+
 // Stat — experimental KPI/metric display
 export {
   Stat,
@@ -235,6 +238,7 @@ export {
 export {
   RichTextEditor,
   type RichTextEditorProps,
+  type RichTextEditorRef,
   type RichTextEditorStatus,
   type RichTextEditorStatusType,
   type RichTextEditorSize,
@@ -242,4 +246,7 @@ export {
   RichTextView,
   type RichTextViewProps,
   sharedEditorTheme,
+  markdownToEditorStateJSON,
+  editorStateJSONToMarkdown,
+  type MarkdownSerializerOptions,
 } from './RichTextEditor';

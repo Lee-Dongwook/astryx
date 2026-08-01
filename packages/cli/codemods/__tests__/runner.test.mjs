@@ -70,6 +70,61 @@ describe('runCodemods — unified config codemod path', () => {
     ).toContain('new-theme');
   });
 
+  it('surfaces a findConfigPath throw (multiple config files) as a structured error, not a crash', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: 'consumer'}),
+    );
+    // Two config files → findConfigPath throws. Config codemods run before the
+    // strict project loader, so an uncaught throw here would abort the whole
+    // upgrade. It must degrade to a structured error and let the run continue.
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.config.ts'),
+      `export default { theme: 'x' };\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.config.js'),
+      `export default { theme: 'x' };\n`,
+    );
+    const srcDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(srcDir);
+    fs.writeFileSync(path.join(srcDir, 'a.tsx'), 'const a = 1;\n');
+
+    const versionManifests = [
+      {
+        version: '0.1.3',
+        transforms: [
+          {
+            name: 'cfg',
+            meta: {title: 'cfg', codemodType: 'config'},
+            transform: () => null,
+          },
+          // A code codemod that MUST still run after the config one fails.
+          {
+            name: 'code-after',
+            meta: {title: 'code after'},
+            transform: file =>
+              file.source.includes('const a')
+                ? file.source.replace('const a', 'const b')
+                : undefined,
+          },
+        ],
+      },
+    ];
+
+    // Must NOT throw; the multi-config problem is surfaced as a structured
+    // error, and the subsequent code codemod is still reached.
+    const result = await runCodemods(versionManifests, {
+      apply: false,
+      path: './src',
+      silent: true,
+    });
+    expect(
+      result.errors.some(e => /Multiple Astryx config files/.test(e.error)),
+    ).toBe(true);
+    expect(result.totalFilesChanged).toBe(1); // code-after previewed a change
+  });
+
   it('still runs core code codemods against source files', async () => {
     const srcDir = path.join(tmpDir, 'src');
     fs.mkdirSync(srcDir);
@@ -137,5 +192,44 @@ describe('runCodemods — unified config codemod path', () => {
     expect([...result.writtenFiles].sort()).toEqual(
       [path.join(srcDir, 'a.ts'), path.join(srcDir, 'b.ts')].sort(),
     );
+  });
+});
+
+describe('findSourceFiles — scan boundaries (symlink + build dirs)', () => {
+  const manifests = [
+    {
+      version: '0.1.3',
+      transforms: [
+        {name: 'p', meta: {title: 'p'}, transform: f => f.source.replace(/foo/g, 'bar')},
+      ],
+    },
+  ];
+
+  it('does not follow a symlinked file out of the scan tree', async () => {
+    const outside = path.join(tmpDir, 'outside');
+    fs.mkdirSync(path.join(tmpDir, 'src'), {recursive: true});
+    fs.mkdirSync(outside, {recursive: true});
+    const secret = path.join(outside, 'secret.ts');
+    fs.writeFileSync(secret, 'const foo = 1;\n');
+    fs.writeFileSync(path.join(tmpDir, 'src', 'real.ts'), 'const foo = 2;\n');
+    fs.symlinkSync(secret, path.join(tmpDir, 'src', 'link.ts'));
+
+    const r = await runCodemods(manifests, {apply: true, path: './src', silent: true});
+    // the symlink target (outside the tree) must be untouched
+    expect(fs.readFileSync(secret, 'utf-8')).toBe('const foo = 1;\n');
+    expect(r.writtenFiles.map(f => path.basename(f))).toEqual(['real.ts']);
+  });
+
+  it('does not scan generated-output dirs (dist/build/out)', async () => {
+    fs.mkdirSync(path.join(tmpDir, 'src'), {recursive: true});
+    fs.mkdirSync(path.join(tmpDir, 'dist'), {recursive: true});
+    fs.mkdirSync(path.join(tmpDir, 'build'), {recursive: true});
+    fs.writeFileSync(path.join(tmpDir, 'src', 'a.ts'), 'const foo = 1;\n');
+    fs.writeFileSync(path.join(tmpDir, 'dist', 'b.js'), 'const foo = 2;\n');
+    fs.writeFileSync(path.join(tmpDir, 'build', 'c.js'), 'const foo = 3;\n');
+
+    const r = await runCodemods(manifests, {apply: true, path: '.', silent: true});
+    expect(r.writtenFiles.map(f => path.basename(f))).toEqual(['a.ts']);
+    expect(fs.readFileSync(path.join(tmpDir, 'dist', 'b.js'), 'utf-8')).toContain('foo');
   });
 });

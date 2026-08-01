@@ -31,7 +31,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as p from '../lib/term-log.mjs';
 import {findConfigPath} from '../lib/project.mjs';
-import {fixDirectiveCorruption, validateOutput} from './runner.mjs';
+import {fixDirectiveCorruption, validateOutput, IGNORED_DIRS} from './runner.mjs';
 
 export const DEFAULT_CODE_EXTENSIONS = [
   '.tsx',
@@ -61,8 +61,11 @@ export function findSourceFiles(dir) {
     }
     for (const entry of entries) {
       const fullPath = path.join(currentDir, entry.name);
+      // Never follow symlinks — writing through one would rewrite its target
+      // outside the scan tree (e.g. into node_modules or anywhere on disk).
+      if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
-        if (entry.name === 'node_modules' || entry.name === '.git') continue;
+        if (IGNORED_DIRS.has(entry.name)) continue;
         walk(fullPath);
       } else {
         results.push(fullPath);
@@ -94,7 +97,23 @@ export function makeLog(silent) {
 export function runConfigCodemod(entry, {apply, log, jscodeshift}) {
   const {codemod, id, package: pkg} = entry;
   const name = `${pkg}:${id}`;
-  const configPath = findConfigPath(process.cwd());
+  // findConfigPath throws when multiple astryx.config.* files coexist. Config
+  // codemods run FIRST (before the strict project loader), so an uncaught throw
+  // here aborts the entire `astryx upgrade` with an un-coded error — breaking
+  // the per-codemod isolation every other failure path honors. Degrade it to a
+  // structured error so the run continues and reports it.
+  let configPath;
+  try {
+    configPath = findConfigPath(process.cwd());
+  } catch (err) {
+    const message = /** @type {any} */ (err).message;
+    log.error(`    ✗ astryx.config.* — ${message}`);
+    return {
+      filesChanged: 0,
+      writtenFiles: [],
+      errors: [{file: 'astryx.config.*', codemod: name, error: message}],
+    };
+  }
   if (!configPath) {
     log.info(`  ${codemod.title} — no astryx.config.* found; skipping.`);
     return {filesChanged: 0, writtenFiles: [], errors: []};

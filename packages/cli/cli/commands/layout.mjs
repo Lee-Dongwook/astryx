@@ -15,16 +15,18 @@
 import * as fs from 'node:fs';
 import {jsonOut, humanLog} from '../../lib/json.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
+import {ERROR_CODES} from '../../lib/error-codes.mjs';
 import {layoutExpand, layoutCheck, layoutGrammar} from '../../api/layout/layout.mjs';
 
 /**
  * The api layer's @returns for these functions widen the `type` discriminator
  * to `string`, so annotate the command-local result with the precise response
- * shapes from src/types/layout so narrowing + jsonOut typecheck.
+ * shapes from the colocated api/layout/layout.type.mjs so narrowing + jsonOut
+ * typecheck.
  *
- * @typedef {import('../../types/layout').LayoutExpandResponse} LayoutExpandResponse
- * @typedef {import('../../types/layout').LayoutCheckResponse} LayoutCheckResponse
- * @typedef {import('../../types/layout').LayoutGrammarResponse} LayoutGrammarResponse
+ * @typedef {import('../../api/layout/layout.type.mjs').LayoutExpandResponse} LayoutExpandResponse
+ * @typedef {import('../../api/layout/layout.type.mjs').LayoutCheckResponse} LayoutCheckResponse
+ * @typedef {import('../../api/layout/layout.type.mjs').LayoutGrammarResponse} LayoutGrammarResponse
  */
 
 /**
@@ -49,7 +51,21 @@ import {layoutExpand, layoutCheck, layoutGrammar} from '../../api/layout/layout.
  * @returns {Promise<string>}
  */
 async function readExpression(expr, options = {}) {
-  if (options.file) return fs.readFileSync(options.file, 'utf-8');
+  if (options.file) {
+    try {
+      return fs.readFileSync(options.file, 'utf-8');
+    } catch (e) {
+      const errno = /** @type {NodeJS.ErrnoException} */ (e);
+      if (errno && errno.code === 'ENOENT') {
+        // A --file pointing at a missing file is foreseeable — surface a
+        // stable code, not the raw ENOENT errno (and no stack in human mode).
+        cliError(`File not found: ${options.file}`, {
+          code: ERROR_CODES.ERR_FILE_NOT_FOUND,
+        });
+      }
+      throw e;
+    }
+  }
   if (expr === '-') {
     /** @type {Buffer[]} */
     const chunks = [];
@@ -78,7 +94,10 @@ export function registerLayout(program) {
       const json = program.opts().json || false;
       const source = await readExpression(expression, options);
       if (!source || source.trim() === '') {
-        cliError('No layout expression given — pass it as an argument, via --file, or on stdin');
+        cliError(
+          'No layout expression given — pass it as an argument, via --file, or on stdin',
+          {code: ERROR_CODES.ERR_MISSING_ARGUMENT},
+        );
         return;
       }
       /** @type {LayoutExpandResponse} */
@@ -121,7 +140,10 @@ export function registerLayout(program) {
       const json = program.opts().json || false;
       const source = await readExpression(expression, options);
       if (!source || source.trim() === '') {
-        cliError('No layout expression given — pass it as an argument, via --file, or on stdin');
+        cliError(
+          'No layout expression given — pass it as an argument, via --file, or on stdin',
+          {code: ERROR_CODES.ERR_MISSING_ARGUMENT},
+        );
         return;
       }
       /** @type {LayoutCheckResponse} */
@@ -137,6 +159,12 @@ export function registerLayout(program) {
         cliError(err.message, {suggestions: err.suggestions || [], code: err.code});
         return;
       }
+      // Exit code is the contract and must NOT depend on --json vs human: an
+      // invalid (but parseable) layout exits 1 in BOTH modes so `layout check`
+      // works as a CI gate / agent check without parsing stdout. Decide it
+      // before the JSON return (parity with doctor / validate-integration).
+      if (!result.data.valid) process.exitCode = 1;
+
       if (json) return jsonOut(result);
 
       const {valid, form, errors, warnings, compact, outline} = result.data;
@@ -147,7 +175,6 @@ export function registerLayout(program) {
           if (e.suggestions && e.suggestions.length > 0) humanLog(`    did you mean: ${e.suggestions.join(', ')}?`);
         }
         humanLog('');
-        process.exitCode = 1;
         return;
       }
       humanLog(`\n✓ Valid (parsed as ${form})`);

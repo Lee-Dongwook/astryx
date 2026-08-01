@@ -21,6 +21,7 @@ import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {getCliInvocation} from '../../utils/package-manager.mjs';
 import {jsonOut, humanLog} from '../../lib/json.mjs';
+import {logger} from '../../api/logger.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
 import {ERROR_CODES} from '../../lib/error-codes.mjs';
 import {themeAdd} from '../../api/theme/add/add.mjs';
@@ -183,21 +184,13 @@ export function registerTheme(program) {
         return;
       }
 
-      // Non-watch: delegate to the API compiler. The logger keeps human output
-      // byte-identical — humanLog → stdout, console.warn/error → stderr — while
-      // --json mode uses a no-op logger so only the envelope reaches stdout. The
+      // Non-watch: delegate to the API compiler. Enable human output unless in
+      // --json mode (log → stdout via humanLog, warn/error → stderr). The
       // "Building theme from" line, the ✓/warning lines, and the install
-      // instructions are all emitted from inside themeBuild via this logger.
-      /** @type {{log: (m?: string) => void, warn: (m?: string) => void, error: (m?: string) => void}} */
-      const logger = json
-        ? {log() {}, warn() {}, error() {}}
-        : {
-            log: humanLog,
-            warn: m => console.warn(m),
-            error: m => console.error(m),
-          };
+      // instructions are all emitted from inside themeBuild via the shared logger.
+      logger.setSilent(json);
       try {
-        const result = await themeBuild(file, {out: options.out}, {cwd: process.cwd(), logger});
+        const result = await themeBuild(file, {out: options.out}, {cwd: process.cwd()});
         if (json && result) jsonOut(result);
       } catch (e) {
         const err = /** @type {import('../../api/error.mjs').AstryxError} */ (e);
@@ -210,7 +203,7 @@ export function registerTheme(program) {
     .description('List themes available to add')
     .action(async () => {
       const json = program.opts().json || false;
-      /** @type {import('../../types/theme').ThemeListResponse} */
+      /** @type {import('../../api/theme/theme.type.mjs').ThemeListResponse} */
       let result;
       try {
         result = themeList();
@@ -249,7 +242,7 @@ export function registerTheme(program) {
       // Existing files require an explicit --overwrite; otherwise themeAdd's
       // ERR_FILE_EXISTS guard rejects the write. `--list` (or a bare `theme add`
       // with no slug) is the list affordance — route it to the list leaf.
-      /** @type {import('../../types/theme').ThemeListResponse | import('../../types/theme').ThemeAddResponse} */
+      /** @type {import('../../api/theme/theme.type.mjs').ThemeListResponse | import('../../api/theme/theme.type.mjs').ThemeAddResponse} */
       let result;
       try {
         result =

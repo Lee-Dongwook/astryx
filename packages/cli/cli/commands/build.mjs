@@ -74,25 +74,21 @@ export function registerBuild(program) {
       }
 
       // Arg validation stays in the CLI.
-      let limit = 60;
-      if (options.limit != null) {
-        const parsed = Number.parseInt(options.limit, 10);
-        if (!Number.isFinite(parsed) || parsed <= 0) {
-          cliError(`Invalid --limit value "${options.limit}". Must be a positive integer.`);
-          return;
-        }
-        limit = parsed;
-      }
+      // Parse --limit to a number; the API validates it (positive integer) and
+      // throws ERR_INVALID_ARGUMENT, so we pass NaN through rather than
+      // pre-rejecting with a generic code here (parity with `search`).
+      const limit =
+        options.limit != null ? Number.parseInt(options.limit, 10) : 60;
 
-      /** @type {import('../../types/build').BuildKitResponse} */
+      /** @type {import('../../api/build/build.type.mjs').BuildKitResponse} */
       let result;
       try {
-        result = /** @type {import('../../types/build').BuildKitResponse} */ (
+        result = /** @type {import('../../api/build/build.type.mjs').BuildKitResponse} */ (
           await buildApi(query, {cwd: process.cwd(), type: options.type, limit})
         );
       } catch (e) {
         const err = /** @type {import('../../api/error.mjs').AstryxError} */ (e);
-        cliError(err.message, {suggestions: err.suggestions});
+        cliError(err.message, {suggestions: err.suggestions, code: err.code});
         return;
       }
 

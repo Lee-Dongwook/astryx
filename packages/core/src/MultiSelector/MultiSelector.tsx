@@ -119,11 +119,12 @@ const styles = stylex.create({
     lineHeight: 'inherit',
     color: 'inherit',
     cursor: 'pointer',
-    outline: {
-      default: 'none',
-      ':focus-visible': `${borderVars['--border-width']} solid ${colorVars['--color-accent']}`,
-    },
-    outlineOffset: '0',
+    // The wrapper (inputWrapperStyles.base) renders the focus ring via
+    // :focus-within when this button is focused, matching
+    // TextInput/NumberInput/Selector. The button must not draw its own
+    // :focus-visible outline or the two stack into a doubled ring over the
+    // trigger.
+    outline: 'none',
     borderRadius: radiusVars['--radius-element'],
   },
   triggerPlaceholder: {
@@ -781,13 +782,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       return [{value: SELECT_ALL_VALUE, label: selectAllLabel}, ...result];
     }
     return result;
-  }, [
-    searchQuery,
-    options,
-    selectedAtOpen,
-    hasSelectAll,
-    selectAllLabel,
-  ]);
+  }, [searchQuery, options, selectedAtOpen, hasSelectAll, selectAllLabel]);
 
   // Layer for dropdown positioning
   const handleLayerHide = useCallback(() => {
@@ -1135,6 +1130,11 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         ? allEnabledSelected
         : optimisticValue.includes(item.value);
       const checkboxValue = isSelectAll ? selectAllState : isSelected;
+      // aria-selected="mixed" is invalid on role="option", and the tri-state
+      // checkbox is inert/decorative, so the indeterminate state must be
+      // conveyed through the option's accessible name (WCAG 4.1.2).
+      const isPartiallySelected =
+        isSelectAll && selectAllState === 'indeterminate';
 
       return (
         <div
@@ -1142,6 +1142,13 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           id={getItemId(flatIndex)}
           role="option"
           aria-selected={isSelected}
+          aria-label={
+            isPartiallySelected
+              ? t('@astryx.multiSelector.selectAllPartiallySelected', {
+                  label: selectAllLabel,
+                })
+              : undefined
+          }
           aria-disabled={item.disabled}
           onClick={() => {
             if (!item.disabled) {
@@ -1186,10 +1193,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       optimisticValue,
       allEnabledSelected,
       selectAllState,
+      selectAllLabel,
       getItemId,
       handleNavigableToggle,
       onItemMouseEnter,
       size,
+      t,
     ],
   );
 
@@ -1217,10 +1226,16 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       cursor = 1;
     }
 
-    // Empty state — no real items to show
+    // Empty state — no real items to show. role="presentation" keeps the
+    // message out of the listbox's accessibility tree (role="listbox" only
+    // permits option/group children); the no-results outcome is announced
+    // via the result-count live region instead.
     if (realItemCount === 0) {
       elements.push(
-        <div key="empty" {...stylex.props(styles.emptyState)}>
+        <div
+          key="empty"
+          role="presentation"
+          {...stylex.props(styles.emptyState)}>
           No results found
         </div>,
       );
@@ -1298,6 +1313,10 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     return elements;
   }, [options, renderItem, sortedItems, searchQuery, hasSelectAll]);
 
+  // The detached message box renders its own leading status icon, so the
+  // on-field icon would duplicate it — keep the chevron indicator instead.
+  const showStatusIcon = status != null && statusVariant !== 'detached';
+
   const multiSelectorContent = (
     <>
       <div
@@ -1319,7 +1338,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             isDisabled && inputWrapperStyles.disabled,
             optimisticValue.length === 0 && styles.triggerPlaceholder,
             status && inputStatusBorderStyles[status.type],
-            status && inputStatusHoverShadowStyles[status.type],
+            status && !isDisabled && inputStatusHoverShadowStyles[status.type],
             inputGroup && groupStyles.inGroup,
             xstyle,
           ),
@@ -1383,23 +1402,45 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             onClick={handleClear}
             aria-label={t('@astryx.multiSelector.clearAll', {label})}
             {...stylex.props(styles.clearButton)}>
-            <Icon icon="close" size="sm" color="secondary" />
+            <Icon
+              icon="close"
+              size="sm"
+              color="secondary"
+              // Stable theme target on the clear glyph itself, so a theme can
+              // restyle just this icon (color, size, hover) via `defineTheme`.
+              // Same-element rules in @layer astryx-theme win over the icon's
+              // own base color/size, which a button-level target could not
+              // reach.
+              {...themeProps('multi-selector-clear-icon')}
+            />
           </button>
         )}
         <span
           {...stylex.props(
             styles.triggerIcon,
-            !status && popover.isOpen && styles.triggerIconOpen,
-            status && styles.triggerIconStatus,
+            !showStatusIcon && popover.isOpen && styles.triggerIconOpen,
+            showStatusIcon && styles.triggerIconStatus,
           )}>
-          {status ? (
+          {showStatusIcon ? (
             <Icon
               icon={STATUS_ICON_MAP[status.type]}
               size="sm"
               color={STATUS_ICON_COLOR_MAP[status.type]}
             />
           ) : (
-            <Icon icon="chevronDown" size="sm" color="inherit" />
+            <Icon
+              icon="chevronDown"
+              size="sm"
+              color="inherit"
+              // Stable theme target on the chevron glyph itself, so a theme can
+              // restyle just this icon (color, size, hover) — and its
+              // open/closed state — via `defineTheme`. Same-element rules in
+              // @layer astryx-theme win over the icon's own base color/size,
+              // which a button-level target could not reach.
+              {...themeProps('multi-selector-indicator-icon', {
+                state: popover.isOpen ? 'expanded' : 'collapsed',
+              })}
+            />
           )}
         </span>
       </div>

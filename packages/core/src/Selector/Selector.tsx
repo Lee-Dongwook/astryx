@@ -963,8 +963,15 @@ export function Selector<T extends SelectorOptionType>(
 
     // Nothing matched across every group/option: show the empty state.
     if (isSearching && filteredItems.length === 0) {
+      // role="presentation" keeps the message out of the listbox's
+      // accessibility tree (role="listbox" only permits option/group
+      // children); the no-results outcome is announced via the
+      // result-count live region instead.
       return [
-        <div key="empty" {...stylex.props(styles.emptyState)}>
+        <div
+          key="empty"
+          role="presentation"
+          {...stylex.props(styles.emptyState)}>
           No results found
         </div>,
       ];
@@ -1025,6 +1032,10 @@ export function Selector<T extends SelectorOptionType>(
     return elements;
   }, [options, renderItem, hasSearch, searchQuery, filteredItems]);
 
+  // The detached message box renders its own leading status icon, so the
+  // on-field icon would duplicate it — keep the chevron indicator instead.
+  const showStatusIcon = status != null && statusVariant !== 'detached';
+
   const selectorContent = (
     <>
       <div
@@ -1046,7 +1057,7 @@ export function Selector<T extends SelectorOptionType>(
             isDisabled && inputWrapperStyles.disabled,
             !selectedItem && styles.triggerPlaceholder,
             status && inputStatusBorderStyles[status.type],
-            status && inputStatusHoverShadowStyles[status.type],
+            status && !isDisabled && inputStatusHoverShadowStyles[status.type],
             inputGroup && groupStyles.inGroup,
             xstyle,
           ),
@@ -1109,23 +1120,45 @@ export function Selector<T extends SelectorOptionType>(
             onClick={handleClear}
             aria-label={t('@astryx.selector.clearLabel', {label})}
             {...stylex.props(styles.clearButton)}>
-            <Icon icon="close" size="sm" color="secondary" />
+            <Icon
+              icon="close"
+              size="sm"
+              color="secondary"
+              // Stable theme target on the clear glyph itself, so a theme can
+              // restyle just this icon (color, size, hover) via `defineTheme`.
+              // Same-element rules in @layer astryx-theme win over the icon's
+              // own base color/size, which a button-level target could not
+              // reach.
+              {...themeProps('selector-clear-icon')}
+            />
           </button>
         )}
         <span
           {...stylex.props(
             styles.triggerIcon,
-            !status && popover.isOpen && styles.triggerIconOpen,
-            status && styles.triggerIconStatus,
+            !showStatusIcon && popover.isOpen && styles.triggerIconOpen,
+            showStatusIcon && styles.triggerIconStatus,
           )}>
-          {status ? (
+          {showStatusIcon ? (
             <Icon
               icon={STATUS_ICON_MAP[status.type]}
               size="sm"
               color={STATUS_ICON_COLOR_MAP[status.type]}
             />
           ) : (
-            <Icon icon="chevronDown" size="sm" color="inherit" />
+            <Icon
+              icon="chevronDown"
+              size="sm"
+              color="inherit"
+              // Stable theme target on the chevron glyph itself, so a theme can
+              // restyle just this icon (color, size, hover) — and its
+              // open/closed state — via `defineTheme`. Same-element rules in
+              // @layer astryx-theme win over the icon's own base color/size,
+              // which a button-level target could not reach.
+              {...themeProps('selector-indicator-icon', {
+                state: popover.isOpen ? 'expanded' : 'collapsed',
+              })}
+            />
           )}
         </span>
       </div>

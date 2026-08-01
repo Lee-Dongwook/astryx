@@ -70,6 +70,10 @@ export default defineConfig(
       "!packages/cli/bin/**/*.mjs",
       "**/*.test-violations.tsx",
       "apps/example-nextjs/*.js",
+      // Generated declaration files (e.g. the CLI's `./api` type surface emitted
+      // from JSDoc by `sync:api-types` at prepack). Like `**/*.d.ts`, these are
+      // build artifacts — not hand-authored source to lint.
+      "**/*.d.mts",
       "**/next-env.d.ts",
       "**/.next/**",
       "apps/example-nextjs-source/*.js",
@@ -179,6 +183,16 @@ export default defineConfig(
           'MetadataList/MetadataList',
           'Carousel/Carousel',
         ],
+      }],
+      // announce() live-region messages are user-facing text; the rule checks
+      // them as call arguments (callees defaults to ['announce']).
+      // TEMPORARY allowlist: these exact strings predate the check and are
+      // being replaced with t(...) in the scan #3 i18n sweep PRs
+      // (CodeBlock 'Copied'; MultiSelector 'Selection cleared' /
+      // 'All selected'). Remove each entry as its fix merges; delete
+      // allowedCalleeStrings entirely once the sweep lands.
+      '@astryx/no-hardcoded-i18n-string': [isStrictMode ? 'error' : 'warn', {
+        allowedCalleeStrings: ['Copied', 'Selection cleared', 'All selected'],
       }],
     },
   },

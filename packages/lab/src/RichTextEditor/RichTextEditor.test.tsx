@@ -11,17 +11,21 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, waitFor} from '@testing-library/react';
-import {useEffect} from 'react';
+import {createRef, useEffect} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
-import type {LexicalEditor} from 'lexical';
+import type {EditorState, LexicalEditor} from 'lexical';
 import {$getRoot, $createParagraphNode, $createTextNode} from 'lexical';
 import {HeadingNode} from '@lexical/rich-text';
 import {
   TRANSFORMERS,
   $convertFromMarkdownString,
 } from '@lexical/markdown';
-import {RichTextEditor} from './RichTextEditor';
+import {RichTextEditor, type RichTextEditorRef} from './RichTextEditor';
 import {RichTextView} from './RichTextView';
+import {
+  markdownToEditorStateJSON,
+  editorStateJSONToMarkdown,
+} from './markdownSerializers';
 
 // Small plugin that captures the editor instance so tests can drive real
 // Lexical updates (jsdom does not implement contenteditable editing).
@@ -333,6 +337,229 @@ describe('RichTextEditor', () => {
       });
     });
   });
+
+  it('exposes an imperative ref handle after mount', () => {
+    const ref = createRef<RichTextEditorRef>();
+    render(<RichTextEditor ref={ref} label="Notes" />);
+    expect(ref.current).not.toBeNull();
+    expect(typeof ref.current?.focus).toBe('function');
+    expect(typeof ref.current?.clear).toBe('function');
+    expect(typeof ref.current?.getEditorState).toBe('function');
+    expect(typeof ref.current?.getMarkdown).toBe('function');
+    expect(typeof ref.current?.getHTML).toBe('function');
+    expect(typeof ref.current?.getEditor).toBe('function');
+  });
+
+  it('ref.focus() runs without throwing and targets the editable surface', () => {
+    const ref = createRef<RichTextEditorRef>();
+    render(<RichTextEditor ref={ref} label="Notes" />);
+    // Lexical dispatches focus via its editor command; jsdom does not always
+    // reflect programmatic contenteditable focus onto document.activeElement,
+    // so assert the call is wired and the root element is reachable rather
+    // than asserting jsdom focus state.
+    expect(() => ref.current?.focus()).not.toThrow();
+    const root = ref.current?.getEditor().getRootElement();
+    expect(root).toBe(screen.getByRole('textbox'));
+  });
+
+  it('ref.getEditorState() returns the current EditorState', () => {
+    const ref = createRef<RichTextEditorRef>();
+    render(
+      <RichTextEditor ref={ref} label="Notes" defaultValue={HELLO_STATE} />,
+    );
+    const state = ref.current?.getEditorState();
+    expect(state).toBeDefined();
+    const text = state?.read(() => $getRoot().getTextContent());
+    expect(text).toBe('Hello world');
+  });
+
+  it('ref.getEditor() returns the underlying LexicalEditor', () => {
+    const ref = createRef<RichTextEditorRef>();
+    render(<RichTextEditor ref={ref} label="Notes" />);
+    const editor = ref.current?.getEditor();
+    expect(editor).toBeDefined();
+    expect(typeof editor?.update).toBe('function');
+  });
+
+  it('ref.getMarkdown() serializes plain text content', () => {
+    const ref = createRef<RichTextEditorRef>();
+    render(
+      <RichTextEditor ref={ref} label="Notes" defaultValue={HELLO_STATE} />,
+    );
+    expect(ref.current?.getMarkdown()).toBe('Hello world');
+  });
+
+  it('ref.getMarkdown() serializes a heading with the default transformers', async () => {
+    const ref = createRef<RichTextEditorRef>();
+    let editorRef: LexicalEditor | undefined;
+    render(
+      <RichTextEditor
+        ref={ref}
+        label="Notes"
+        plugins={<CaptureEditor onReady={e => (editorRef = e)} />}
+      />,
+    );
+    await waitFor(() => expect(editorRef).toBeDefined());
+    editorRef!.update(() => {
+      $convertFromMarkdownString('# Title', TRANSFORMERS);
+    });
+    await waitFor(() =>
+      expect(ref.current?.getMarkdown()).toBe('# Title'),
+    );
+  });
+
+  it('ref.getMarkdown() honors a custom transformers prop', async () => {
+    // With an empty transformers set, a heading node cannot be represented in
+    // markdown, so its text is emitted as a plain paragraph (no "# "). This
+    // proves getMarkdown() uses the same transformers the editor is
+    // configured with, not a hardcoded default.
+    const ref = createRef<RichTextEditorRef>();
+    let editorRef: LexicalEditor | undefined;
+    render(
+      <RichTextEditor
+        ref={ref}
+        label="Notes"
+        transformers={[]}
+        plugins={<CaptureEditor onReady={e => (editorRef = e)} />}
+      />,
+    );
+    await waitFor(() => expect(editorRef).toBeDefined());
+    // Seed a heading node directly (bypassing shortcuts) using the full set.
+    editorRef!.update(() => {
+      $convertFromMarkdownString('# Title', TRANSFORMERS);
+    });
+    await waitFor(() => expect(ref.current?.getMarkdown()).toBe('Title'));
+  });
+
+  it('ref.getHTML() serializes content to an HTML string', () => {
+    const ref = createRef<RichTextEditorRef>();
+    render(
+      <RichTextEditor ref={ref} label="Notes" defaultValue={HELLO_STATE} />,
+    );
+    const html = ref.current?.getHTML();
+    expect(typeof html).toBe('string');
+    // A paragraph with the seeded text renders as a <p> containing "Hello world".
+    expect(html).toContain('<p');
+    expect(html).toContain('Hello world');
+  });
+
+  it('ref.clear() resets the editor to a single empty paragraph', async () => {
+    const ref = createRef<RichTextEditorRef>();
+    render(
+      <RichTextEditor ref={ref} label="Notes" defaultValue={HELLO_STATE} />,
+    );
+    ref.current?.clear();
+    await waitFor(() => {
+      const state: EditorState | undefined = ref.current?.getEditorState();
+      const text = state?.read(() => $getRoot().getTextContent());
+      expect(text).toBe('');
+    });
+    // The root should hold exactly one (empty) paragraph, not zero children —
+    // a bare root breaks selection/typing.
+    const state = ref.current?.getEditorState();
+    const childCount = state?.read(() => $getRoot().getChildrenSize());
+    expect(childCount).toBe(1);
+  });
+
+  it('ref.clear() fires onChange', async () => {
+    const ref = createRef<RichTextEditorRef>();
+    const onChange = vi.fn();
+    render(
+      <RichTextEditor
+        ref={ref}
+        label="Notes"
+        defaultValue={HELLO_STATE}
+        onChange={onChange}
+      />,
+    );
+    // Wait for the editor to mount and the initial state to settle so any
+    // seed-time onChange has already fired before we assert on clear().
+    await waitFor(() => expect(ref.current).not.toBeNull());
+    onChange.mockClear();
+    ref.current?.clear();
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+  });
+
+  it('ref.clear() and ref.focus() are no-ops when isReadOnly', async () => {
+    const ref = createRef<RichTextEditorRef>();
+    const onChange = vi.fn();
+    render(
+      <RichTextEditor
+        ref={ref}
+        label="Notes"
+        defaultValue={HELLO_STATE}
+        onChange={onChange}
+        isReadOnly
+      />,
+    );
+    onChange.mockClear();
+    ref.current?.focus();
+    ref.current?.clear();
+    // Give any (unexpected) async update a chance to flush before asserting.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(onChange).not.toHaveBeenCalled();
+    const state = ref.current?.getEditorState();
+    const text = state?.read(() => $getRoot().getTextContent());
+    expect(text).toBe('Hello world');
+  });
+
+  it('ref.clear() is a no-op when isDisabled', async () => {
+    const ref = createRef<RichTextEditorRef>();
+    const onChange = vi.fn();
+    render(
+      <RichTextEditor
+        ref={ref}
+        label="Notes"
+        defaultValue={HELLO_STATE}
+        onChange={onChange}
+        isDisabled
+      />,
+    );
+    onChange.mockClear();
+    ref.current?.clear();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(onChange).not.toHaveBeenCalled();
+    const state = ref.current?.getEditorState();
+    const text = state?.read(() => $getRoot().getTextContent());
+    expect(text).toBe('Hello world');
+  });
+
+  it('does not render a character counter when maxLength is not set', () => {
+    render(<RichTextEditor label="Notes" defaultValue={HELLO_STATE} />);
+    expect(screen.queryByText(/\d+\/\d+/)).not.toBeInTheDocument();
+  });
+
+  it('renders a character counter reflecting the seeded content length', async () => {
+    // HELLO_STATE is "Hello world" (11 chars).
+    render(
+      <RichTextEditor label="Notes" defaultValue={HELLO_STATE} maxLength={100} />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText('11/100')).toBeInTheDocument(),
+    );
+  });
+
+  it('shows an over-limit counter when content exceeds maxLength', async () => {
+    // 11 chars with a limit of 5 -> over limit.
+    render(
+      <RichTextEditor label="Notes" defaultValue={HELLO_STATE} maxLength={5} />,
+    );
+    await waitFor(() => expect(screen.getByText('11/5')).toBeInTheDocument());
+    // aria-live region announces the overflow for screen readers.
+    expect(screen.getByText('6 characters over limit')).toBeInTheDocument();
+  });
+
+  it('associates the counter with the editor via aria-describedby', async () => {
+    render(
+      <RichTextEditor label="Notes" defaultValue={HELLO_STATE} maxLength={100} />,
+    );
+    const counter = await screen.findByText('11/100');
+    const describedBy = screen
+      .getByRole('textbox')
+      .getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    expect(describedBy!.split(' ')).toContain(counter.id);
+  });
 });
 
 describe('RichTextView', () => {
@@ -436,5 +663,44 @@ describe('RichTextView', () => {
   it('renders nothing (no crash) on malformed JSON with no fallback', () => {
     expect(() => render(<RichTextView value={'garbage'} />)).not.toThrow();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+});
+
+describe('markdown serializers', () => {
+  it('markdownToEditorStateJSON produces a heading node from "# "', () => {
+    const json = markdownToEditorStateJSON('# Title');
+    const parsed = JSON.parse(json);
+    const first = parsed.root.children[0];
+    expect(first.type).toBe('heading');
+    expect(first.tag).toBe('h1');
+    expect(first.children[0].text).toBe('Title');
+  });
+
+  it('editorStateJSONToMarkdown round-trips a heading back to "# "', () => {
+    const json = markdownToEditorStateJSON('# Title');
+    expect(editorStateJSONToMarkdown(json)).toBe('# Title');
+  });
+
+  it('markdown round-trips through both helpers', () => {
+    const md = '# Heading\n\nSome **bold** text';
+    const json = markdownToEditorStateJSON(md);
+    expect(editorStateJSONToMarkdown(json)).toBe(md);
+  });
+
+  it('honors a custom (empty) transformers set — no heading syntax', () => {
+    // With no transformers, "# Title" is not recognized as a heading; it stays
+    // a plain paragraph, so serializing back yields the literal text.
+    const json = markdownToEditorStateJSON('# Title', {transformers: []});
+    const parsed = JSON.parse(json);
+    expect(parsed.root.children[0].type).toBe('paragraph');
+    expect(parsed.root.children[0].children[0].text).toBe('# Title');
+  });
+
+  it('produces JSON consumable as RichTextEditor defaultValue', async () => {
+    const value = markdownToEditorStateJSON('Hello world');
+    render(<RichTextEditor label="Notes" defaultValue={value} />);
+    await waitFor(() =>
+      expect(screen.getByRole('textbox').textContent).toContain('Hello world'),
+    );
   });
 });

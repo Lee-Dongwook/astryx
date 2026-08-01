@@ -21,6 +21,11 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-multi-selector', visualProps: ['size', 'status']},
+      {className: 'astryx-multi-selector-clear-icon'},
+      {
+        className: 'astryx-multi-selector-indicator-icon',
+        states: ['state'],
+      },
     ],
   },
   components: [
@@ -167,6 +172,12 @@ export const docs = {
           type: '(option: MultiSelectorOptionData) => ReactNode',
           description:
             'Custom render function for each selectable option in the dropdown. Not called for dividers, sections, or the select-all row.',
+        },
+        {
+          name: 'width',
+          type: 'SizeValue',
+          description:
+            'Width of the field (number = pixels, string used as-is, e.g. "100%"). Sizes the whole field (label, control, and status) so they stay aligned.',
         },
         {
           name: 'xstyle',

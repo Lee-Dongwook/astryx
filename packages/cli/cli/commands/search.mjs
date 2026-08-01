@@ -38,23 +38,19 @@ export function registerSearch(program) {
     .option('--type <domain>', `Filter to one domain (${SEARCH_DOMAINS.join('|')})`)
     .option('--limit <n>', 'Max number of results (default 20)')
     .option('--detail', 'Verbose output (include import paths and match reason)')
-    .action(async (/** @type {string} */ query, /** @type {{type?: import('../../types/search').SearchDomain, limit?: string, detail?: boolean}} */ options) => {
+    .action(async (/** @type {string} */ query, /** @type {{type?: import('../../api/search/search.type.mjs').SearchDomain, limit?: string, detail?: boolean}} */ options) => {
       const json = program.opts().json || false;
 
-      let limit = 20;
-      if (options.limit != null) {
-        const parsed = Number.parseInt(options.limit, 10);
-        if (!Number.isFinite(parsed) || parsed <= 0) {
-          cliError(`Invalid --limit value "${options.limit}". Must be a positive integer.`);
-          return;
-        }
-        limit = parsed;
-      }
+      // Parse --limit to a number; the API validates it (positive integer) and
+      // throws ERR_INVALID_ARGUMENT, so we pass NaN through rather than
+      // pre-rejecting with a generic code here.
+      const limit =
+        options.limit != null ? Number.parseInt(options.limit, 10) : 20;
 
-      /** @type {import('../../types/search').SearchResponse} */
+      /** @type {import('../../api/search/search.type.mjs').SearchResponse} */
       let result;
       try {
-        result = /** @type {import('../../types/search').SearchResponse} */ (
+        result = /** @type {import('../../api/search/search.type.mjs').SearchResponse} */ (
           await searchApi(query, {
             cwd: process.cwd(),
             type: options.type,
@@ -63,7 +59,7 @@ export function registerSearch(program) {
         );
       } catch (e) {
         const err = /** @type {import('../../api/error.mjs').AstryxError} */ (e);
-        cliError(err.message, {suggestions: err.suggestions});
+        cliError(err.message, {suggestions: err.suggestions, code: err.code});
         return;
       }
 

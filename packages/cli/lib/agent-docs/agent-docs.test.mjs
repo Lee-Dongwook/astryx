@@ -18,6 +18,7 @@ import {
   resolveAgentPaths,
   parseBlockVersion,
   inspectAgentDocs,
+  isAstryxInitialized,
 } from './agent-docs.mjs';
 
 let tmpDir;
@@ -713,5 +714,90 @@ describe('inspectAgentDocs', () => {
     const res = inspectAgentDocs(tmpDir);
     expect(res.installedVersion).toBe('3.0.0');
     expect(res.status).toBe('current');
+  });
+});
+
+describe('injectXdsBlock / removeXdsBlock — malformed managed blocks (no user-content loss)', () => {
+  const S = '<!-- ASTRYX:START -->';
+  const E = '<!-- ASTRYX:END -->';
+  const BLOCK = `${S}\nNEW\n${E}`;
+
+  it('does not duplicate user content when END precedes START', () => {
+    const f = path.join(tmpDir, 'a.md');
+    fs.writeFileSync(f, `# Doc\nUSER-A\n${E}\nUSER-B\n${S}\nUSER-C\n`);
+    removeXdsBlock(f);
+    const c = fs.readFileSync(f, 'utf-8');
+    expect((c.match(/USER-B/g) || []).length).toBeLessThanOrEqual(1);
+  });
+
+  it('refuses (throws) instead of orphaning a second block when duplicates exist', () => {
+    const f = path.join(tmpDir, 'b.md');
+    fs.writeFileSync(f, `# Doc\n${S}\nB1\n${E}\nMID\n${S}\nB2\n${E}\nTAIL\n`);
+    expect(() => injectXdsBlock(f, BLOCK)).toThrow(/multiple|malformed/i);
+    // file left untouched for the user to fix
+    expect(fs.readFileSync(f, 'utf-8')).toContain('MID');
+    expect(fs.readFileSync(f, 'utf-8')).toContain('TAIL');
+  });
+
+  it('refuses to append a second block when a START has no matching END', () => {
+    const f = path.join(tmpDir, 'c.md');
+    fs.writeFileSync(f, `# Doc\nUSER1\n${S}\nOLD (no end)\nUSER2\n`);
+    expect(() => injectXdsBlock(f, BLOCK)).toThrow(/end marker|malformed|no matching/i);
+    expect((fs.readFileSync(f, 'utf-8').match(/ASTRYX:START/g) || []).length).toBe(1);
+  });
+
+  it('replaces a single well-formed block idempotently, preserving surrounding content', () => {
+    const f = path.join(tmpDir, 'ok.md');
+    fs.writeFileSync(f, `# Doc\nUSER\n${S}\nOLD\n${E}\nTAIL\n`);
+    injectXdsBlock(f, BLOCK);
+    const c = fs.readFileSync(f, 'utf-8');
+    expect((c.match(/ASTRYX:START/g) || []).length).toBe(1);
+    expect(c).toContain('NEW');
+    expect(c).toContain('USER');
+    expect(c).toContain('TAIL');
+    expect(c).not.toContain('OLD');
+  });
+});
+
+describe('isAstryxInitialized — resilient to malformed markers (postinstall hot path)', () => {
+  // isAstryxInitialized runs on every consumer `npm install` (via postinstall).
+  // It must never throw — even on a half-written or garbage-marker file — so it
+  // uses a plain `.includes(MARKER_START)`, never the strict findManagedBlock.
+  const START = '<!-- ASTRYX:START -->';
+  const END = '<!-- ASTRYX:END -->';
+
+  it('returns true (never throws) on duplicate START markers', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      `${START}\na\n${START}\nb\n${END}\n`,
+    );
+    expect(() => isAstryxInitialized(tmpDir)).not.toThrow();
+    expect(isAstryxInitialized(tmpDir)).toBe(true);
+  });
+
+  it('returns true on an END-before-START file without throwing', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      `${END}\nuser\n${START}\nblock\n`,
+    );
+    expect(() => isAstryxInitialized(tmpDir)).not.toThrow();
+    expect(isAstryxInitialized(tmpDir)).toBe(true);
+  });
+
+  it('returns true on a START with no END (half-written block)', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      `# Doc\nuser\n${START}\ntruncated block, no end\n`,
+    );
+    expect(() => isAstryxInitialized(tmpDir)).not.toThrow();
+    expect(isAstryxInitialized(tmpDir)).toBe(true);
+  });
+
+  it('returns false for a directory with no agent docs', () => {
+    expect(isAstryxInitialized(tmpDir)).toBe(false);
+  });
+
+  it('returns false for a nonexistent directory', () => {
+    expect(isAstryxInitialized(path.join(tmpDir, 'does-not-exist'))).toBe(false);
   });
 });
