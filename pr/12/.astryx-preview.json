@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "repository": "Lee-Dongwook/astryx",
+  "pullRequest": {
+    "number": 12,
+    "headSha": "33d9a6f1210e1d6983ad28a533ab2a432e5f0619",
+    "headRef": "fix/power-search-properties",
+    "headRepository": "Lee-Dongwook/astryx",
+    "headRepositoryId": "1296087583"
+  },
+  "sourceRun": {
+    "id": 33751780445,
+    "attempt": 1,
+    "conclusion": "cancelled"
+  },
+  "targets": {
+    "storybook": {
+      "available": false,
+      "path": "pr/12/",
+      "indexSha256": null
+    },
+    "sandbox": {
+      "available": false,
+      "path": "pr/12/sandbox/",
+      "indexSha256": null
+    }
+  }
+}
