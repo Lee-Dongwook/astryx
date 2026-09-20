@@ -112,6 +112,21 @@
       "aliases": []
     },
     {
+      "name": "component-charts-chart-axis",
+      "path": "components/charts/chart-axis",
+      "aliases": []
+    },
+    {
+      "name": "component-charts-chart-grid",
+      "path": "components/charts/chart-grid",
+      "aliases": []
+    },
+    {
+      "name": "component-charts-chart-legend",
+      "path": "components/charts/chart-legend",
+      "aliases": []
+    },
+    {
       "name": "component-charts-chart-swatch",
       "path": "components/charts/chart-swatch",
       "aliases": []
