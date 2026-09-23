@@ -123,7 +123,7 @@ function ButtonGroupOverflowMenu({
   size: ButtonSize;
   onTriggerRef: (element: HTMLButtonElement | null) => void;
 }): ReactNode {
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLElement>(null);
   const moreIcon = useIcon('moreHorizontal');
 
   return (
