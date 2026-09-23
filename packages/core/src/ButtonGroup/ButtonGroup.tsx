@@ -38,6 +38,7 @@ import {Popover} from '../Popover';
 import {IconButton} from '../IconButton';
 import {useIcon} from '../Icon';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 // =============================================================================
@@ -232,6 +233,7 @@ export function ButtonGroup({
   ...props
 }: ButtonGroupProps): ReactNode {
   const size = useSize(sizeProp, 'md');
+  const t = useTranslator();
   const lastFocusedMemberRef = useRef<HTMLElement | null>(null);
   const overflowTriggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -305,7 +307,7 @@ export function ButtonGroup({
               overflowRenderer={items => (
                 <ButtonGroupOverflowMenu
                   items={items}
-                  label={`More actions (${items.length})`}
+                  label={t('@astryx.moreMenu.label')}
                   size={size}
                   onTriggerRef={element => {
                     overflowTriggerRef.current = element;
