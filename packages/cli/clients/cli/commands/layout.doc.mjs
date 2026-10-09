@@ -12,7 +12,7 @@ export const doc = {
   type: 'command',
   name: 'layout',
   displayName: 'astryx layout',
-  namespace: 'cli',
+  namespace: 'cli/commands',
   summary: 'Generate XDS layouts from compressed expressions (XLE/XLO)',
   description:
     'The layout command group. Running astryx layout with no subcommand prints the ' +
@@ -27,8 +27,10 @@ export const doc = {
     },
   ],
   exitCodes: [
-    {code: 0, when: 'success (help shown, or a subcommand succeeded)'},
-    {code: 1, when: 'an unknown subcommand'},
+    {code: 0, when: 'a subcommand succeeded, or --help'},
+    {code: 1, when: 'no subcommand (help is printed) or an unknown subcommand'},
   ],
+  deprecated: 'DEP-0006: Use `astryx build` to start from a template, `astryx template` to scaffold, and `astryx docs layout` for guidance.',
+  notes: [{"type": "prose", "text": "**Deprecated (DEP-0006).** Use `astryx build` to choose the template to start from, `astryx template` to scaffold it, and `astryx docs layout` for layout guidance. This command will be removed in a future minor release."}],
   related: ['template', 'build'],
 };

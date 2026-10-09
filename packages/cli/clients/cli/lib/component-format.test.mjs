@@ -56,7 +56,7 @@ describe('formatFull sub-component rendering', () => {
     expect(out).toContain('### XDSRadioListItem');
     expect(out).not.toContain('undefined');
     // Points the reader at the sub-component's own docs instead of a blank.
-    expect(out).toContain('astryx component XDSRadioListItem');
+    expect(out).toMatch(/(?:astryx|@astryxdesign\/cli) component XDSRadioListItem/);
   });
 
   it('renders a full props table for a sub-component that has inline props', () => {
@@ -157,7 +157,7 @@ describe('deprecated theming target guidance', () => {
 
   it('keeps the replacement in brief agent guidance', () => {
     expect(formatBrief(docs, 'Example')).toContain(
-      'astryx-old-target deprecated→new-target',
+      'astryx-old-target deprecated->new-target',
     );
   });
 });

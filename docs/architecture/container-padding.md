@@ -6,8 +6,8 @@ id: architecture:container-padding
 authority: current
 archive_reason: null
 superseded_by: null
-approved_by: cixzhang
-approved_at: 2026-09-21
+approved_by: imdreamrunner
+approved_at: 2026-10-04
 owners: [cixzhang, imdreamrunner]
 applies_to:
   [
@@ -37,6 +37,7 @@ verified_by:
     packages/core/src/Layout/Layout.test.tsx,
     packages/core/src/Layout/LayoutSlots.test.tsx,
     packages/core/src/Layout/overlayPaddingReset.test.tsx,
+    packages/core/src/BottomSheet/BottomSheetPanel.test.tsx,
     packages/core/src/Layout/__tests__/edgeCompensation.test.tsx,
     packages/core/src/List/List.test.tsx,
     packages/core/src/TabList/TabList.test.tsx,
@@ -77,9 +78,10 @@ The protocol has four layers:
    public spacing scale. Theme component overrides may set supported padding
    properties. `architecture:theme-authoring-contract` and
    `architecture:component-theming-surface` own those public surfaces.
-2. **Container lowering.** `container()` resolves Card, Section, and Dialog
-   padding into internal logical-edge variables. An explicit component padding
-   prop may publish the same geometry through the maps in `padding.stylex.ts`.
+2. **Container lowering.** `container()` resolves Card, Section, Dialog, and
+   BottomSheet padding into internal logical-edge variables. An explicit
+   component padding prop may publish the same geometry through the maps in
+   `padding.stylex.ts`.
 3. **Descendant geometry.** Four inherited `--container-padding-*` variables
    carry the inset that bleed descendants subtract. Container publishers and
    explicit region-padding paths couple those variables to their padding.
@@ -96,7 +98,7 @@ The protocol has four layers:
 
 | Role                       | Participants                                           | Contract responsibility                                                                                                                                                  |
 | -------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Container publisher        | Card, Section, Dialog, ScrollableArea                  | Resolve component padding or publish explicit content-box padding as logical-edge and Layout inset variables                                                             |
+| Container publisher        | Card, Section, Dialog, BottomSheet, ScrollableArea     | Resolve component padding or publish explicit content-box padding as logical-edge and Layout inset variables                                                             |
 | Region publisher           | LayoutHeader, LayoutContent, LayoutFooter, LayoutPanel | Publish baseline or explicit-padding geometry; automatic outer-edge publication has the conformance gap below                                                            |
 | Bleed consumer             | Section, ScrollableArea, Layout, Divider, Table        | Subtract inherited inset on the edges each component is designed to escape; ScrollableArea does so only with `isFullBleed`                                               |
 | Edge-compensation consumer | TabList; List/ListItem rows (admitted)                 | Move visible content toward the container content line while retaining component-owned interaction padding; exact alignment depends on each component's bounded geometry |
@@ -110,6 +112,14 @@ Table and Divider consume bleed geometry, TabList consumes current edge-
 compensation geometry, List is the admitted next consumer, and Toolbar consumes
 alignment geometry. Participation here does not by itself make any of those
 components a member of `family:layout-regions`.
+
+BottomSheet publishes the way Dialog does. Its Sheet panel is the overlay
+boundary owner, and its scrolling Content area is a container publisher that
+pads caller content and publishes the applied inset. The inset resolves from the
+`padding` prop on the public spacing scale, then the theme's `padding` properties
+on the `bottom-sheet` component, then `--spacing-4` on every logical edge,
+matching Dialog. This prop and theme property are BottomSheet's projection of
+container lowering.
 
 Edge compensation is a two-sided geometry contract, not a token contract:
 
@@ -141,6 +151,15 @@ does not read inherited container padding or give those children a
 caller-controlled compensation API. This revision leaves that mechanism
 unchanged.
 
+A component with a documented anatomy container that applies edge compensation
+MAY expose an anatomy-targeted `<anatomy>EdgeCompensation` prop to modify that
+container's compensation. The prop MUST use the shared axis values `inline`,
+`block`, or `all`, preserve the component's documented omission behavior, and
+keep the compensation amount component-owned. `inline` means the named
+container's logical inline edge, `block` means both block edges, and `all`
+combines them. These values do not extend the self-compensation vocabulary below.
+`endContentEdgeCompensation` is DialogHeader's projection of this rule.
+
 `edgeCompensation` names the caller's intent: reduce component-owned inset at
 selected ancestor container content edges while keeping the component's own paint
 or interaction inset. The component contract states when that bounded adjustment
@@ -154,8 +173,9 @@ value vocabulary is:
 A component exposes only the values its current contract and evidence support.
 This mode does not promise that the component box reaches the container's outer
 edge. Reserve `isFullBleed` for components such as ScrollableArea whose visible
-surface consumes the full inherited container inset. New edge-alignment APIs use
-`edgeCompensation` rather than exposing margin values or inventing a second name.
+surface consumes the full inherited container inset. New self-compensation APIs
+use `edgeCompensation` rather than exposing margin values or inventing a second
+name.
 
 ### Edge-compensation ledger
 
@@ -273,12 +293,12 @@ evidence, not part of this documentation stack.
   alias through its approved compatibility window, moves maintained examples to
   the canonical name, and tests both paths before removal.
 - Changing `container()` or the public-to-private padding lowering reviews Card,
-  Section, Dialog, Layout regions, and overlay behavior together.
+  Section, Dialog, BottomSheet, Layout regions, and overlay behavior together.
 - Changing overlay hosting or adding an overlay root verifies that stale page
   geometry stops at the new boundary without suppressing public theme values.
-- A component that wants a new public full-bleed mode or padding prop follows
-  its component/family API review; this architecture does not authorize that
-  API. `component:List` owns List's first new projection, and
+- A component other than BottomSheet that wants a new public full-bleed mode or
+  padding prop follows its component/family API review; this architecture does
+  not authorize that API. `component:List` owns List's first new projection, and
   `component:TabList` owns its existing behavior and migration. This record does
   not authorize another component projection.
 
@@ -290,8 +310,8 @@ evidence, not part of this documentation stack.
   logical-edge setters, Section propagation, and the overlay reset.
 - `packages/core/src/Layout/edgeCompensation.stylex.ts` — owns the container-side
   alignment adjustment for marked edge content.
-- Card, Section, Dialog, ScrollableArea, and Layout region implementations —
-  publish their current geometry.
+- Card, Section, Dialog, BottomSheet, ScrollableArea, and Layout region
+  implementations — publish their current geometry.
 - Section, ScrollableArea, Layout, Divider, Table, TabList, and Toolbar
   implementations — consume the current geometry for bleed or alignment.
 - TabList currently lowers its component-owned projection; List owns its admitted
@@ -319,6 +339,7 @@ evidence, not part of this documentation stack.
 | INV2, INV5       | `Section.test.tsx` per-edge and nested-propagation tests                       | A per-edge prop leaves a stale geometry variable, or nested Sections lose the shipped propagation order                                              |
 | INV2, INV3, INV8 | `ScrollableArea.test.tsx` padding and full-bleed tests                         | The content box publishes inset different from its applied padding, or the viewport escapes inherited padding without explicit full bleed            |
 | INV4             | Layout source review plus `Layout.test.tsx` and `LayoutSlots.test.tsx`         | Slot presence stops selecting the shipped applied outer/inner edge styles; exact republished geometry remains limited by the named conformance gap   |
+| INV2             | `BottomSheetPanel.test.tsx` padding tests                                      | The Content area publishes an inset that differs from its applied padding, or the `padding` prop or theme `padding` does not reach it                |
 | INV6             | `overlayPaddingReset.test.tsx`                                                 | An overlay inherits page inset, loses its theme's Section padding, or lets ancestor Section propagation cross the boundary                           |
 | INV3, INV7       | `Layout/__tests__/edgeCompensation.test.tsx` plus component tests              | An unmarked child is compensated, or marked edge content loses direct-child discoverability                                                          |
 | INV9, INV10      | `List.test.tsx` plus real-browser geometry evidence                            | The header moves; a row reads the wrong logical edge, diverges from themed/density padding, applies the wrong bounded movement, or loses paint inset |

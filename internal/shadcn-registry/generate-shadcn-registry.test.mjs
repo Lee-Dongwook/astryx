@@ -61,8 +61,19 @@ const SHADCN_ENTRY = createRequire(
 ).resolve('shadcn');
 
 const packages = [
-  {name: '@astryxdesign/cli', version: '0.6.0'},
-  {name: '@astryxdesign/core', version: '0.5.2'},
+  {
+    name: '@astryxdesign/cli',
+    version: '0.6.0',
+    packageExports: {'.': './dist/index.js', './api': './dist/api.js'},
+  },
+  {
+    name: '@astryxdesign/core',
+    version: '0.5.2',
+    packageExports: {
+      '.': './dist/index.js',
+      './Button': './dist/Button/index.js',
+    },
+  },
 ];
 
 function fixture(overrides = {}) {
@@ -280,6 +291,61 @@ describe('buildShadcnRegistry', () => {
       'showcases/button/variants',
       'templates/dashboard',
     ]);
+  });
+
+  it('skips blocks whose component import is not published', () => {
+    const input = fixture();
+    input.blocks.push({
+      ...input.blocks[0],
+      dirName: 'TimerShowcase',
+      name: 'Timer',
+      displayName: 'Timer',
+      exampleFor: 'Timer',
+      source:
+        "import {Timer} from '@astryxdesign/core/Timer';\n" +
+        'export default function TimerShowcase() { return <Timer />; }\n',
+    });
+
+    const {items, counts} = buildShadcnRegistry(input);
+
+    expect(items.map(item => item.name)).not.toContain(
+      'showcase-timer-default',
+    );
+    expect(counts.skippedUnpublishedBlocks).toBe(1);
+  });
+
+  it('omits production blocks that import an unpublished named component', () => {
+    const root = mkdtempSync(
+      path.join(tmpdir(), 'astryx-shadcn-unpublished-component-'),
+    );
+    const outDir = path.join(root, 'shadcn');
+    try {
+      const input = fixture();
+      input.blocks.push({
+        ...input.blocks[0],
+        dirName: 'ButtonFuture',
+        name: 'Button — Future',
+        displayName: 'Button — Future',
+        componentsUsed: ['Button', 'FutureButton'],
+        source:
+          "import {Button, FutureButton} from '@astryxdesign/core/Button';\n" +
+          'export default function ButtonFuture() { return <><Button label="Save" /><FutureButton /></>; }\n',
+      });
+
+      const result = generateShadcnRegistryForTarget({
+        target: 'latest',
+        outDir,
+        ...input,
+      });
+
+      expect(result.total).toBe(3);
+      expect(result.skippedUnpublishedBlocks).toBe(1);
+      expect(
+        existsSync(path.join(outDir, 'showcases', 'button', 'future.json')),
+      ).toBe(false);
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
   });
 
   it('writes canonical nested paths and compatibility aliases', () => {

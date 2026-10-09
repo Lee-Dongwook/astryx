@@ -123,7 +123,7 @@ export type {
 
 // Layer provider
 export {LayerProvider} from './Layer';
-export type {LayerProviderProps, LayerToastConfig} from './Layer';
+export type {LayerProviderProps, LayerInset, LayerToastConfig} from './Layer';
 
 // Toast
 export {Toast, useToast} from './Toast';
@@ -160,6 +160,9 @@ export * from './Spinner';
 
 // Timestamp display
 export * from './Timestamp';
+
+// Elapsed timer display
+export * from './Timer';
 
 // Overlay
 export * from './Overlay';
