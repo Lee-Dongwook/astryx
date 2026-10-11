@@ -81,6 +81,7 @@ const STRUCTURAL_VARS = new Set([
   '--indicator-color',
   '--indicator-width',
   '--table-resize-height',
+  '--table-resize-offset',
   // sticky-columns plugin: opaque backdrop (overridable) + the row overlay it
   // replays on pinned cells. Structural/runtime, not themeable design tokens.
   '--table-sticky-background',
@@ -263,6 +264,9 @@ const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   // The destructive item variant recolors the Item it renders; Item owns,
   // documents and reads both slots.
   DropdownMenu: ['--_item-label-color', '--_item-description-color'],
+  // A layer content root stops an outer Stepper's connector gap; Stepper owns,
+  // documents and reads it.
+  Layer: ['--step-connector-gap'],
 };
 
 /**
