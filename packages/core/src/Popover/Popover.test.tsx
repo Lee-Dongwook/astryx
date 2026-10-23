@@ -85,7 +85,7 @@ describe('usePopover public return type', () => {
     expect(hasInternalFocusTarget).toBe(false);
   });
 
-  it('emits canonical and deprecated surface targets for direct hook consumers', () => {
+  it('emits only the canonical surface target for direct hook consumers', () => {
     function HeadlessPopover() {
       const popover = usePopover({dialogLabel: 'Headless popover'});
       return (
@@ -110,7 +110,7 @@ describe('usePopover public return type', () => {
       hidden: true,
     });
     expect(surface).toHaveClass('astryx-popover');
-    expect(surface).toHaveClass('astryx-popover-surface');
+    expect(surface).not.toHaveClass('astryx-popover-surface');
   });
 });
 
@@ -122,6 +122,21 @@ describe('Popover', () => {
       </Popover>,
     );
     expect(screen.getByRole('button', {name: 'Open'})).toBeInTheDocument();
+  });
+
+  it('does not open from an aria-disabled trigger', () => {
+    render(
+      <Popover content={<span>Content</span>} label="Test">
+        <button type="button" aria-disabled="true">
+          Trigger
+        </button>
+      </Popover>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Trigger'});
+    // A click dispatched straight on the trigger, as element.click() or an
+    // assistive-technology activate command does (spec:AST-085 FR2).
+    act(() => trigger.click());
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('sets aria-haspopup on trigger', () => {
@@ -280,10 +295,10 @@ describe('Popover', () => {
       'utf8',
     );
     expect(popoverSource).toMatch(
-      /surfaceViewportFit:[\s\S]*?maxInlineSize: stylex\.firstThatWorks\(\s*layerViewportInset\.maxInlineSize/,
+      /surfaceViewportFit:[\s\S]*?maxInlineSize: stylex\.firstThatWorks\(\s*`calc\(\$\{layerViewportInset\.maxInlineSize\}\)`/,
     );
     expect(popoverSource).toMatch(
-      /surfaceViewportFit:[\s\S]*?maxBlockSize: stylex\.firstThatWorks\(\s*layerViewportInset\.maxBlockSize/,
+      /surfaceViewportFit:[\s\S]*?maxBlockSize: stylex\.firstThatWorks\(\s*`calc\(\$\{layerViewportInset\.maxBlockSize\}\)`/,
     );
     expect(popoverSource).not.toMatch(/safe-area-inset|calc\(100%/);
     expect(surface?.className).not.toContain(
@@ -1061,7 +1076,8 @@ describe('Popover', () => {
     expect(target).not.toBeNull();
     // The surface paints background, radius and elevation; a target on the
     // content box inside it would style a box that paints nothing.
-    expect(target).toHaveClass('astryx-popover-surface');
+    expect(target).toHaveClass('astryx-popover');
+    expect(target).not.toHaveClass('astryx-popover-surface');
     expect(target).toHaveClass('consumer-popover');
     expect(target).toHaveStyle({padding: '0'});
     expect(target).toContainElement(screen.getByTestId('content'));

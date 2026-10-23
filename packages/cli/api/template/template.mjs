@@ -24,6 +24,7 @@ import {
 } from '../../foundation/discovery/template-adapter.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {orderByAffinity} from '../../foundation/text/suggest-order.mjs';
 import {templateList} from './list/list.mjs';
 import {templateShow} from './show/show.mjs';
 import {templateSkeleton} from './skeleton/skeleton.mjs';
@@ -86,6 +87,51 @@ export async function template(name, options = {}) {
     cwd = process.cwd(),
   } = options;
 
+  if (cdn) {
+    const ignored = [
+      name ? '<name>' : null,
+      list ? '--list' : null,
+      skeleton ? '--skeleton' : null,
+      type ? '--type' : null,
+      packageFilter ? '--package' : null,
+    ].filter(Boolean);
+    if (ignored.length > 0) {
+      throw new AstryxError(
+        `\`--cdn\` cannot be combined with ${ignored.join(', ')}: the CDN starter does not use templates.`,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+  }
+  if (list) {
+    const ignored = [
+      name ? '<name>' : null,
+      targetPath ? '<path>' : null,
+      skeleton ? '--skeleton' : null,
+      overwrite ? '--overwrite' : null,
+    ].filter(Boolean);
+    if (ignored.length > 0) {
+      throw new AstryxError(
+        `\`--list\` cannot be combined with ${ignored.join(', ')}: it lists templates and does not scaffold.`,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+  }
+  if (skeleton) {
+    const ignored = [
+      targetPath ? '<path>' : null,
+      overwrite ? '--overwrite' : null,
+    ].filter(Boolean);
+    if (ignored.length > 0) {
+      throw new AstryxError(
+        `\`--skeleton\` cannot be combined with ${ignored.join(', ')}: it prints the skeleton and does not write files.`,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+  }
+
   // The CDN starter ships as an asset rather than as a discovered template, so
   // it answers before discovery — nothing here needs a name resolved.
   if (cdn) {
@@ -143,7 +189,10 @@ export async function template(name, options = {}) {
   if (name && candidates.length === 0) {
     throw new AstryxError(
       `Unknown template "${name}"`,
-      templates.map(t => ({name: t.dirName, reason: `${t.type} template`})),
+      orderByAffinity(name, templates, t => [t.dirName, t.name]).map(t => ({
+        name: t.dirName,
+        reason: `${t.type} template`,
+      })),
       ERROR_CODES.ERR_UNKNOWN_TEMPLATE,
     );
   }

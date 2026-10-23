@@ -240,6 +240,10 @@ const ReferenceSectionSchema = z
     title: nonEmptyString,
     category: z.string().optional(),
     content: z.array(SectionContentBlockSchema),
+    // Where an extension adds this section to the topic it extends: before
+    // or after the section with this key. Ignored on any other section.
+    before: nonEmptyString.optional(),
+    after: nonEmptyString.optional(),
     previewType: z
       .enum([
         'swatch',
@@ -574,6 +578,7 @@ export const CommandDocKindSchema = z
     exitCodes: z
       .array(z.object({code: z.number(), when: z.string()}).passthrough())
       .optional(),
+    outsideProject: z.enum(['same', 'refuse', 'own']).optional(),
     related: z.array(z.string()).optional(),
     notes: z.array(ReferenceContentBlockSchema).optional(),
   })
